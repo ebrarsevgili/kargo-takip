@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using KargoTakip.Api.Models;
 using KargoTakip.Api.Services;
@@ -48,11 +50,79 @@ app.MapGet("/api/track/{trackingNumber}", async (string trackingNumber, Shipment
         : Results.Ok(ToPublic(shipment));
 });
 
+// ===================================================================
+// Admin endpoints: require the X-Api-Key header
+// ===================================================================
+var admin = app.MapGroup("/api/shipments");
+
+admin.AddEndpointFilter(async (context, next) =>
+{
+    var configured = context.HttpContext.RequestServices
+        .GetRequiredService<IConfiguration>()["Admin:ApiKey"];
+
+    if (string.IsNullOrWhiteSpace(configured))
+        return Results.Problem(
+            title: "Yönetici anahtarı tanımlı değil",
+            detail: "Admin:ApiKey ayarını yapılandırmadan yönetici uçları kapalıdır.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    var provided = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    if (!SecretsMatch(provided, configured))
+        return Results.Problem(
+            title: "Yetkisiz",
+            detail: "Geçerli bir X-Api-Key başlığı gönder.",
+            statusCode: StatusCodes.Status401Unauthorized);
+
+    return await next(context);
+});
+
+admin.MapPost("/", async (CreateShipmentRequest request, ShipmentService service, CancellationToken ct) =>
+{
+    var result = await service.CreateAsync(request, ct);
+    return result.Kind == ResultKind.Ok
+        ? Results.Created($"/api/shipments/{result.Value!.TrackingNumber}", ToAdmin(result.Value))
+        : ToProblem(result);
+});
+
+admin.MapGet("/", async (ShipmentStatus? status, ShipmentService service, CancellationToken ct) =>
+{
+    var items = await service.ListAsync(status, ct);
+    return Results.Ok(items.Select(ToAdmin));
+});
+
+admin.MapGet("/{trackingNumber}", async (string trackingNumber, ShipmentService service, CancellationToken ct) =>
+{
+    var shipment = await service.GetAsync(trackingNumber, ct);
+    return shipment is null
+        ? Results.Problem(title: "Kargo bulunamadı", statusCode: StatusCodes.Status404NotFound)
+        : Results.Ok(ToAdmin(shipment));
+});
+
+admin.MapPost("/{trackingNumber}/events", async (string trackingNumber, AddEventRequest request, ShipmentService service, CancellationToken ct) =>
+{
+    var result = await service.AddEventAsync(trackingNumber, request, ct);
+    return result.Kind == ResultKind.Ok ? Results.Ok(ToAdmin(result.Value!)) : ToProblem(result);
+});
+
 app.Run();
 
 // ===================================================================
 // Helpers
 // ===================================================================
+
+static IResult ToProblem<T>(ServiceResult<T> result) => result.Kind switch
+{
+    ResultKind.Invalid => Results.ValidationProblem(result.Errors!),
+    ResultKind.NotFound => Results.Problem(title: "Kargo bulunamadı", statusCode: StatusCodes.Status404NotFound),
+    ResultKind.Conflict => Results.Problem(title: "İşlem yapılamadı", detail: result.Message, statusCode: StatusCodes.Status409Conflict),
+    _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+};
+
+// Compare SHA-256 digests in constant time so neither timing nor length leaks information about the key.
+static bool SecretsMatch(string provided, string expected) =>
+    CryptographicOperations.FixedTimeEquals(
+        SHA256.HashData(Encoding.UTF8.GetBytes(provided)),
+        SHA256.HashData(Encoding.UTF8.GetBytes(expected)));
 
 static IReadOnlyList<TrackingEventDto> ToEventDtos(Shipment s) =>
     s.Events.OrderBy(e => e.Timestamp)
@@ -62,3 +132,7 @@ static IReadOnlyList<TrackingEventDto> ToEventDtos(Shipment s) =>
 static PublicTrackingDto ToPublic(Shipment s) => new(
     s.TrackingNumber, s.Status, s.OriginCity, s.DestinationCity,
     ShipmentService.MaskName(s.ReceiverName), s.CreatedAt, ToEventDtos(s));
+
+static AdminShipmentDto ToAdmin(Shipment s) => new(
+    s.TrackingNumber, s.SenderName, s.ReceiverName, s.ReceiverPhone,
+    s.OriginCity, s.DestinationCity, s.WeightKg, s.Status, s.CreatedAt, ToEventDtos(s));
