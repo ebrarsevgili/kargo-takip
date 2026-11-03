@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+
+# Data file created at runtime
+KargoTakip.Api/data/
