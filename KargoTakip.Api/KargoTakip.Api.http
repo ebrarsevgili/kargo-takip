@@ -1,0 +1,34 @@
+@host = http://localhost:5205
+@apiKey = gelistirme-anahtari
+
+### Create a shipment (admin)
+POST {{host}}/api/shipments
+X-Api-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "senderName": "Ayşe Yılmaz",
+  "receiverName": "Mehmet Demir",
+  "receiverPhone": "0532 000 00 00",
+  "originCity": "İstanbul",
+  "destinationCity": "Burdur",
+  "weightKg": 2.5
+}
+
+### List shipments (admin). Optional: ?status=InTransit
+GET {{host}}/api/shipments
+X-Api-Key: {{apiKey}}
+
+### Add an event (admin). Take the tracking number from the response above.
+POST {{host}}/api/shipments/KT0000000000/events
+X-Api-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "status": "InTransit",
+  "location": "Ankara Aktarma Merkezi",
+  "note": "Transfer merkezinden çıktı."
+}
+
+### Public tracking lookup
+GET {{host}}/api/track/KT0000000000
