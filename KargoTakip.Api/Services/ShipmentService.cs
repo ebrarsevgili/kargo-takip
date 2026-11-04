@@ -17,9 +17,6 @@ public sealed partial class ShipmentService
     private readonly IUserRepository _users;
     private readonly TimeProvider _time;
 
-    // Serializes writes so two people adding events to the same shipment cannot overwrite each other.
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
-
     public ShipmentService(IShipmentRepository repo, IUserRepository users, TimeProvider time)
     {
         _repo = repo;
@@ -35,6 +32,8 @@ public sealed partial class ShipmentService
 
     public static bool IsValidTrackingNumber(string? value) =>
         !string.IsNullOrWhiteSpace(value) && TrackingFormat().IsMatch(value.Trim());
+
+    public static bool IsValidPhone(string value) => PhoneFormat().IsMatch(value);
 
     public static string Normalize(string trackingNumber) => trackingNumber.Trim().ToUpperInvariant();
 
@@ -125,7 +124,7 @@ public sealed partial class ShipmentService
 
         if (errors.Count > 0) return ServiceResult<Shipment>.Invalid(errors);
 
-        await _writeLock.WaitAsync(ct);
+        await DataLock.Gate.WaitAsync(ct);
         try
         {
             var now = _time.GetUtcNow();
@@ -158,7 +157,7 @@ public sealed partial class ShipmentService
         }
         finally
         {
-            _writeLock.Release();
+            DataLock.Gate.Release();
         }
     }
 
@@ -179,7 +178,7 @@ public sealed partial class ShipmentService
         ValidateCore(errors, sender, receiver, phone, origin, destination, req.WeightKg);
         if (errors.Count > 0) return ServiceResult<Shipment>.Invalid(errors);
 
-        await _writeLock.WaitAsync(ct);
+        await DataLock.Gate.WaitAsync(ct);
         try
         {
             var shipment = await _repo.GetAsync(Normalize(trackingNumber), ct);
@@ -200,7 +199,7 @@ public sealed partial class ShipmentService
         }
         finally
         {
-            _writeLock.Release();
+            DataLock.Gate.Release();
         }
     }
 
@@ -209,7 +208,7 @@ public sealed partial class ShipmentService
         if (actor.Role != UserRole.Admin)
             return ServiceResult<bool>.Forbidden("Kargo silme yetkisi yalnızca yöneticilerde.");
 
-        await _writeLock.WaitAsync(ct);
+        await DataLock.Gate.WaitAsync(ct);
         try
         {
             return await _repo.DeleteAsync(Normalize(trackingNumber), ct)
@@ -218,7 +217,7 @@ public sealed partial class ShipmentService
         }
         finally
         {
-            _writeLock.Release();
+            DataLock.Gate.Release();
         }
     }
 
@@ -245,7 +244,7 @@ public sealed partial class ShipmentService
 
         if (errors.Count > 0) return ServiceResult<Shipment>.Invalid(errors);
 
-        await _writeLock.WaitAsync(ct);
+        await DataLock.Gate.WaitAsync(ct);
         try
         {
             var shipment = await GetForAsync(actor, trackingNumber, ct);
@@ -282,7 +281,7 @@ public sealed partial class ShipmentService
         }
         finally
         {
-            _writeLock.Release();
+            DataLock.Gate.Release();
         }
     }
 

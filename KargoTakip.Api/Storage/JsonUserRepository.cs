@@ -15,11 +15,20 @@ public sealed class JsonUserRepository : IUserRepository
     public Task<AppUser?> GetByUsernameAsync(string username, CancellationToken ct = default) =>
         Task.FromResult(_items.Find(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase)));
 
+    public Task<AppUser?> GetByCourierIdAsync(Guid courierId, CancellationToken ct = default) =>
+        Task.FromResult(_items.Find(u => u.CourierId == courierId));
+
     public Task<bool> AnyAsync(CancellationToken ct = default) => Task.FromResult(_items.Any());
 
     public Task AddAsync(AppUser user, CancellationToken ct = default)
     {
         if (!_items.TryAdd(user)) throw new InvalidOperationException("A user with this id already exists.");
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(AppUser user, CancellationToken ct = default)
+    {
+        if (!_items.Replace(user)) throw new KeyNotFoundException("User not found.");
         return Task.CompletedTask;
     }
 
