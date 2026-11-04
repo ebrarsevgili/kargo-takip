@@ -11,6 +11,14 @@ public record CreateShipmentRequest(
     decimal? WeightKg,
     string? OwnerUsername = null);   // admins may create a shipment on behalf of a customer
 
+public record UpdateShipmentRequest(
+    string? SenderName,
+    string? ReceiverName,
+    string? ReceiverPhone,
+    string? OriginCity,
+    string? DestinationCity,
+    decimal? WeightKg);
+
 public record AddEventRequest(
     ShipmentStatus? Status,
     string? Location,

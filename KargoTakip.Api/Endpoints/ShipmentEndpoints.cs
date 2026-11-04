@@ -57,6 +57,29 @@ public static class ShipmentEndpoints
                 : result.ToProblem();
         });
 
+        // Editing and deleting are admin-only: the route policy is the first line of defence, the service checks again.
+        group.MapPut("/{trackingNumber}", async (HttpContext http, string trackingNumber, UpdateShipmentRequest request,
+            ShipmentService service, ShipmentMapper mapper, CancellationToken ct) =>
+        {
+            if (Actor.From(http.User) is not { } actor) return Results.Unauthorized();
+
+            var result = await service.UpdateAsync(actor, trackingNumber, request, ct);
+            return result.Kind == ResultKind.Ok
+                ? Results.Ok(await mapper.ToDtoAsync(result.Value!, ct))
+                : result.ToProblem();
+        })
+        .RequireAuthorization("AdminOnly");
+
+        group.MapDelete("/{trackingNumber}", async (HttpContext http, string trackingNumber,
+            ShipmentService service, CancellationToken ct) =>
+        {
+            if (Actor.From(http.User) is not { } actor) return Results.Unauthorized();
+
+            var result = await service.DeleteAsync(actor, trackingNumber, ct);
+            return result.Kind == ResultKind.Ok ? Results.NoContent() : result.ToProblem();
+        })
+        .RequireAuthorization("AdminOnly");
+
         return app;
     }
 }

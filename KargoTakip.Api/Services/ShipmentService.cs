@@ -111,16 +111,7 @@ public sealed partial class ShipmentService
         var origin = Clean(req.OriginCity);
         var destination = Clean(req.DestinationCity);
 
-        Require(errors, nameof(req.SenderName), sender, 100, "Gönderen adı");
-        Require(errors, nameof(req.ReceiverName), receiver, 100, "Alıcı adı");
-        Require(errors, nameof(req.OriginCity), origin, 80, "Çıkış şehri");
-        Require(errors, nameof(req.DestinationCity), destination, 80, "Varış şehri");
-
-        if (phone is not null && !PhoneFormat().IsMatch(phone))
-            errors[nameof(req.ReceiverPhone)] = new[] { "Telefon numarası 7-20 karakter olmalı; yalnızca rakam, +, -, boşluk ve parantez içerebilir." };
-
-        if (req.WeightKg is null or <= 0 or > 1000)
-            errors[nameof(req.WeightKg)] = new[] { "Ağırlık 0'dan büyük ve en fazla 1000 kg olmalı." };
+        ValidateCore(errors, sender, receiver, phone, origin, destination, req.WeightKg);
 
         Guid? ownerId = actor.Role == UserRole.Customer ? actor.UserId : null;
         if (actor.Role == UserRole.Admin && Clean(req.OwnerUsername) is { } ownerUsername)
@@ -164,6 +155,66 @@ public sealed partial class ShipmentService
 
             await _repo.AddAsync(shipment, ct);
             return ServiceResult<Shipment>.Ok(shipment);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    // ---- Editing and deleting (admin only) ----
+
+    public async Task<ServiceResult<Shipment>> UpdateAsync(Actor actor, string trackingNumber, UpdateShipmentRequest req, CancellationToken ct)
+    {
+        if (actor.Role != UserRole.Admin)
+            return ServiceResult<Shipment>.Forbidden("Kargo bilgilerini yalnızca yöneticiler düzenleyebilir.");
+
+        var errors = new Dictionary<string, string[]>();
+        var sender = Clean(req.SenderName);
+        var receiver = Clean(req.ReceiverName);
+        var phone = Clean(req.ReceiverPhone);
+        var origin = Clean(req.OriginCity);
+        var destination = Clean(req.DestinationCity);
+
+        ValidateCore(errors, sender, receiver, phone, origin, destination, req.WeightKg);
+        if (errors.Count > 0) return ServiceResult<Shipment>.Invalid(errors);
+
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            var shipment = await _repo.GetAsync(Normalize(trackingNumber), ct);
+            if (shipment is null) return ServiceResult<Shipment>.NotFound();
+
+            if (shipment.IsClosed)
+                return ServiceResult<Shipment>.Conflict("Teslim edilmiş veya iptal edilmiş bir kargo düzenlenemez.");
+
+            shipment.SenderName = sender!;
+            shipment.ReceiverName = receiver!;
+            shipment.ReceiverPhone = phone;
+            shipment.OriginCity = origin!;
+            shipment.DestinationCity = destination!;
+            shipment.WeightKg = Math.Round(req.WeightKg!.Value, 2);
+
+            await _repo.UpdateAsync(shipment, ct);
+            return ServiceResult<Shipment>.Ok(shipment);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public async Task<ServiceResult<bool>> DeleteAsync(Actor actor, string trackingNumber, CancellationToken ct)
+    {
+        if (actor.Role != UserRole.Admin)
+            return ServiceResult<bool>.Forbidden("Kargo silme yetkisi yalnızca yöneticilerde.");
+
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            return await _repo.DeleteAsync(Normalize(trackingNumber), ct)
+                ? ServiceResult<bool>.Ok(true)
+                : ServiceResult<bool>.NotFound();
         }
         finally
         {
@@ -263,6 +314,23 @@ public sealed partial class ShipmentService
             if (!await _repo.ExistsAsync(candidate, ct)) return candidate;
         }
         throw new InvalidOperationException("Could not generate a unique tracking number.");
+    }
+
+    // Field rules shared by "create" and "edit".
+    private static void ValidateCore(Dictionary<string, string[]> errors,
+        string? sender, string? receiver, string? phone, string? origin, string? destination, decimal? weightKg)
+    {
+        Require(errors, nameof(CreateShipmentRequest.SenderName), sender, 100, "Gönderen adı");
+        Require(errors, nameof(CreateShipmentRequest.ReceiverName), receiver, 100, "Alıcı adı");
+        Require(errors, nameof(CreateShipmentRequest.OriginCity), origin, 80, "Çıkış şehri");
+        Require(errors, nameof(CreateShipmentRequest.DestinationCity), destination, 80, "Varış şehri");
+
+        if (phone is not null && !PhoneFormat().IsMatch(phone))
+            errors[nameof(CreateShipmentRequest.ReceiverPhone)] =
+                new[] { "Telefon numarası 7-20 karakter olmalı; yalnızca rakam, +, -, boşluk ve parantez içerebilir." };
+
+        if (weightKg is null or <= 0 or > 1000)
+            errors[nameof(CreateShipmentRequest.WeightKg)] = new[] { "Ağırlık 0'dan büyük ve en fazla 1000 kg olmalı." };
     }
 
     private static string? Clean(string? value)
