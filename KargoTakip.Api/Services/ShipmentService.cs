@@ -64,6 +64,29 @@ public sealed partial class ShipmentService
             _ => _repo.ListAsync(status, actor.UserId, null, ct)
         };
 
+    public const int MaxPageSize = 50;
+
+    /// <summary>Filtered, newest-first, paged list of the shipments this user may see.</summary>
+    public async Task<PagedResult<Shipment>> SearchAsync(Actor actor, ShipmentFilter filter, CancellationToken ct)
+    {
+        var visible = await ListAsync(actor, filter.Status, ct);
+
+        var term = filter.Search?.Trim();
+        IEnumerable<Shipment> matches = string.IsNullOrEmpty(term)
+            ? visible
+            : visible.Where(s => TextSearch.MatchesAll(term,
+                s.TrackingNumber, s.SenderName, s.ReceiverName, s.ReceiverPhone, s.OriginCity, s.DestinationCity));
+
+        var ordered = matches.OrderByDescending(s => s.CreatedAt).ToList();
+
+        var pageSize = Math.Clamp(filter.PageSize, 1, MaxPageSize);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(ordered.Count / (double)pageSize));
+        var page = Math.Clamp(filter.Page, 1, totalPages);
+
+        var items = ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return new PagedResult<Shipment>(items, ordered.Count, page, pageSize, totalPages);
+    }
+
     private static bool CanSee(Actor actor, Shipment shipment) => actor.Role switch
     {
         UserRole.Admin => true,

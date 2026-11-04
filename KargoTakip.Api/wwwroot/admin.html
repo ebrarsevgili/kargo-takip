@@ -125,7 +125,7 @@
     // ---- List ----
     async function loadList() {
       const status = $("status-filter").value;
-      const items = await call(status ? `/api/shipments?status=${encodeURIComponent(status)}` : "/api/shipments");
+      const { items } = await call(status ? `/api/shipments?status=${encodeURIComponent(status)}&pageSize=50` : "/api/shipments?pageSize=50");
 
       $("empty-note").classList.toggle("hidden", items.length > 0);
       $("shipment-rows").replaceChildren(...items.map(item =>
