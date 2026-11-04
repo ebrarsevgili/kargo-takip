@@ -19,12 +19,16 @@ builder.Services.AddProblemDetails();
 builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = false);
 
 // ---- Storage and services ----
-var dataFile = builder.Configuration["Storage:FilePath"] ?? "data/shipments.json";
-if (!Path.IsPathRooted(dataFile))
-    dataFile = Path.Combine(builder.Environment.ContentRootPath, dataFile);
+var dataDirectory = builder.Configuration["Storage:DataDirectory"] ?? "data";
+if (!Path.IsPathRooted(dataDirectory))
+    dataDirectory = Path.Combine(builder.Environment.ContentRootPath, dataDirectory);
 
-builder.Services.AddSingleton(new StorageOptions(dataFile));
-builder.Services.AddSingleton<IShipmentRepository, JsonShipmentRepository>(); // Switching storage later only changes this line.
+builder.Services.AddSingleton(new StorageOptions(dataDirectory));
+// Switching storage later only changes these registrations.
+builder.Services.AddSingleton<IShipmentRepository, JsonShipmentRepository>();
+builder.Services.AddSingleton<IUserRepository, JsonUserRepository>();
+builder.Services.AddSingleton<ICourierRepository, JsonCourierRepository>();
+builder.Services.AddSingleton<IVehicleRepository, JsonVehicleRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ShipmentService>();
 

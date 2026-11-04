@@ -49,7 +49,7 @@ public sealed partial class ShipmentService
         _repo.GetAsync(Normalize(trackingNumber), ct);
 
     public Task<IReadOnlyList<Shipment>> ListAsync(ShipmentStatus? status, CancellationToken ct) =>
-        _repo.ListAsync(status, ct);
+        _repo.ListAsync(status, null, null, ct);
 
     public async Task<ServiceResult<Shipment>> CreateAsync(CreateShipmentRequest req, CancellationToken ct)
     {
