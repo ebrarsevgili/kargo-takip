@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kargo Takip · Yönetim</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>Yönetim paneli</h1>
+      <a href="index.html">Takip sayfası</a>
+    </header>
+
+    <!-- 1) API key -->
+    <form id="key-form" class="card" novalidate>
+      <div class="row">
+        <div class="grow">
+          <label for="api-key">API anahtarı (X-Api-Key)</label>
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit">Giriş yap</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0;font-size:.85rem">
+        Anahtar yalnızca bu sekmede, sekme kapanana kadar tutulur.
+      </p>
+      <div id="key-message" class="msg error hidden" role="alert"></div>
+    </form>
+
+    <div id="panel" class="hidden">
+      <!-- 2) New shipment -->
+      <form id="create-form" class="card" novalidate>
+        <h2>Yeni kargo</h2>
+        <div class="grid">
+          <div><label for="sender">Gönderen</label><input id="sender" name="senderName" maxlength="100" required></div>
+          <div><label for="receiver">Alıcı</label><input id="receiver" name="receiverName" maxlength="100" required></div>
+          <div><label for="phone">Alıcı telefonu (isteğe bağlı)</label><input id="phone" name="receiverPhone" maxlength="20" inputmode="tel"></div>
+          <div><label for="origin">Çıkış şehri</label><input id="origin" name="originCity" maxlength="80" required></div>
+          <div><label for="destination">Varış şehri</label><input id="destination" name="destinationCity" maxlength="80" required></div>
+          <div><label for="weight">Ağırlık (kg)</label><input id="weight" name="weightKg" type="number" min="0.01" max="1000" step="0.01" required></div>
+        </div>
+        <button type="submit">Kargo oluştur</button>
+        <div id="create-message" class="msg hidden" role="status"></div>
+      </form>
+
+      <!-- 3) Shipment list -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <h2 style="margin:0">Kargolar</h2>
+          <div>
+            <label for="status-filter" class="hidden">Duruma göre filtre</label>
+            <select id="status-filter"></select>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Takip no</th><th>Alıcı</th><th>Güzergâh</th><th>Durum</th><th>Tarih</th><th></th></tr>
+            </thead>
+            <tbody id="shipment-rows"></tbody>
+          </table>
+        </div>
+        <p id="empty-note" class="muted hidden">Henüz kargo yok.</p>
+      </div>
+
+      <!-- 4) Add event -->
+      <form id="event-form" class="card hidden" novalidate>
+        <h2 id="event-title">Hareket ekle</h2>
+        <div class="grid">
+          <div><label for="event-status">Yeni durum</label><select id="event-status" name="status"></select></div>
+          <div><label for="event-location">Konum</label><input id="event-location" name="location" maxlength="100" required></div>
+          <div><label for="event-note">Not (isteğe bağlı)</label><input id="event-note" name="note" maxlength="300"></div>
+        </div>
+        <div class="row">
+          <button type="submit">Ekle</button>
+          <button type="button" id="event-cancel" class="secondary">Vazgeç</button>
+        </div>
+        <div id="event-message" class="msg hidden" role="status"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    "use strict";
+
+    const $ = id => document.getElementById(id);
+    let apiKey = "";
+    let selectedNumber = null;
+
+    // sessionStorage can throw in some contexts (private tabs etc.); the page still works if the key cannot be stored.
+    function readStoredKey() { try { return sessionStorage.getItem("kargo-api-key") || ""; } catch { return ""; } }
+    function storeKey(value) { try { sessionStorage.setItem("kargo-api-key", value); } catch { /* ignore */ } }
+    function clearStoredKey() { try { sessionStorage.removeItem("kargo-api-key"); } catch { /* ignore */ } }
+
+    function say(box, text, kind) {
+      box.textContent = text;
+      box.className = `msg ${kind}`;
+    }
+    function hide(box) { box.classList.add("hidden"); }
+
+    const call = (path, options = {}) => api(path, { ...options, key: apiKey });
+
+    // ---- Options ----
+    $("status-filter").append(
+      h("option", { value: "" }, "Tüm durumlar"),
+      ...Object.entries(STATUS_LABELS).map(([value, label]) => h("option", { value }, label)));
+
+    $("event-status").append(
+      ...Object.entries(STATUS_LABELS)
+        .filter(([value]) => value !== "Created")
+        .map(([value, label]) => h("option", { value }, label)));
+
+    // ---- Sign in ----
+    async function signIn(key) {
+      apiKey = key;
+      try {
+        await loadList();
+        storeKey(key);
+        hide($("key-message"));
+        $("panel").classList.remove("hidden");
+      } catch (error) {
+        apiKey = "";
+        clearStoredKey();
+        $("panel").classList.add("hidden");
+        say($("key-message"), error.message, "error");
+      }
+    }
+
+    $("key-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const key = $("api-key").value.trim();
+      if (!key) return say($("key-message"), "API anahtarını gir.", "error");
+      signIn(key);
+    });
+
+    // ---- List ----
+    async function loadList() {
+      const status = $("status-filter").value;
+      const items = await call(status ? `/api/shipments?status=${encodeURIComponent(status)}` : "/api/shipments");
+
+      $("empty-note").classList.toggle("hidden", items.length > 0);
+      $("shipment-rows").replaceChildren(...items.map(item =>
+        h("tr", null,
+          h("td", { class: "mono" }, h("a", { href: `index.html?no=${encodeURIComponent(item.trackingNumber)}` }, item.trackingNumber)),
+          h("td", null, item.receiverName),
+          h("td", null, `${item.originCity} → ${item.destinationCity}`),
+          h("td", null, statusBadge(item.status)),
+          h("td", null, formatDate(item.createdAt)),
+          h("td", null,
+            ["Delivered", "Cancelled"].includes(item.status)
+              ? null
+              : h("button", { type: "button", class: "secondary", onclick: () => openEventForm(item) }, "Hareket ekle")))));
+    }
+
+    $("status-filter").addEventListener("change", () => loadList().catch(e => say($("key-message"), e.message, "error")));
+
+    // ---- New shipment ----
+    $("create-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const body = {
+        senderName: data.senderName,
+        receiverName: data.receiverName,
+        receiverPhone: data.receiverPhone || null,
+        originCity: data.originCity,
+        destinationCity: data.destinationCity,
+        weightKg: data.weightKg === "" ? null : Number(data.weightKg)
+      };
+
+      const submit = form.querySelector("button[type=submit]");
+      submit.disabled = true;
+      try {
+        const created = await call("/api/shipments", { method: "POST", body });
+        say($("create-message"), `Kargo oluşturuldu. Takip numarası: ${created.trackingNumber}`, "success");
+        form.reset();
+        await loadList();
+      } catch (error) {
+        say($("create-message"), error.message, "error");
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    // ---- Add event ----
+    function openEventForm(item) {
+      selectedNumber = item.trackingNumber;
+      $("event-title").textContent = `Hareket ekle · ${item.trackingNumber}`;
+      hide($("event-message"));
+      $("event-form").classList.remove("hidden");
+      $("event-location").focus();
+      $("event-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    $("event-cancel").addEventListener("click", () => {
+      selectedNumber = null;
+      $("event-form").classList.add("hidden");
+    });
+
+    $("event-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!selectedNumber) return;
+
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const submit = form.querySelector("button[type=submit]");
+      submit.disabled = true;
+      try {
+        await call(`/api/shipments/${encodeURIComponent(selectedNumber)}/events`, {
+          method: "POST",
+          body: { status: data.status, location: data.location, note: data.note || null }
+        });
+        form.reset();
+        selectedNumber = null;
+        form.classList.add("hidden");
+        await loadList();
+      } catch (error) {
+        say($("event-message"), error.message, "error");
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    // Continue automatically if this tab was already signed in.
+    const saved = readStoredKey();
+    if (saved) { $("api-key").value = saved; signIn(saved); }
+  </script>
+</body>
+</html>
