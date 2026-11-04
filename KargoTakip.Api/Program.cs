@@ -47,8 +47,8 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseRateLimiter();
-
-app.MapGet("/", () => "Cargo tracking API is running.");
+app.UseDefaultFiles();   // serves / from wwwroot/index.html
+app.UseStaticFiles();
 
 // ===================================================================
 // Public: look up a shipment by tracking number
