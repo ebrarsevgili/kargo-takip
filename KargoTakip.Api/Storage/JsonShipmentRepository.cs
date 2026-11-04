@@ -120,6 +120,8 @@ public sealed class JsonShipmentRepository : IShipmentRepository
         OriginCity = s.OriginCity,
         DestinationCity = s.DestinationCity,
         WeightKg = s.WeightKg,
+        OwnerUserId = s.OwnerUserId,
+        CourierId = s.CourierId,
         Status = s.Status,
         CreatedAt = s.CreatedAt,
         Events = s.Events.Select(e => new TrackingEvent

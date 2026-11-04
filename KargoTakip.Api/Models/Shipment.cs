@@ -27,6 +27,8 @@ public class Shipment
     public string OriginCity { get; set; } = "";
     public string DestinationCity { get; set; } = "";
     public decimal WeightKg { get; set; }
+    public Guid? OwnerUserId { get; set; }   // customer account that owns the shipment (optional)
+    public Guid? CourierId { get; set; }     // courier responsible for delivery (optional)
     public ShipmentStatus Status { get; set; } = ShipmentStatus.Created;
     public DateTimeOffset CreatedAt { get; set; }
     public List<TrackingEvent> Events { get; set; } = new();
