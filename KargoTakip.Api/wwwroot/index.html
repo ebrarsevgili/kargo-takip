@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kargo Takip</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>Kargo Takip</h1>
+      <a href="admin.html">Yönetici paneli</a>
+    </header>
+
+    <form id="search-form" class="card" novalidate>
+      <div class="row">
+        <div class="grow">
+          <label for="tracking-number">Takip numarası</label>
+          <input id="tracking-number" name="tracking-number" placeholder="KT1234567890"
+                 maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+        </div>
+        <button type="submit" id="search-button">Sorgula</button>
+      </div>
+      <div id="search-error" class="msg error hidden" role="alert"></div>
+    </form>
+
+    <div id="result" aria-live="polite"></div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    "use strict";
+
+    const form = document.getElementById("search-form");
+    const input = document.getElementById("tracking-number");
+    const button = document.getElementById("search-button");
+    const errorBox = document.getElementById("search-error");
+    const result = document.getElementById("result");
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.remove("hidden");
+      result.replaceChildren();
+    }
+
+    function render(data) {
+      const cancelled = data.status === "Cancelled";
+      const currentIndex = STATUS_FLOW.indexOf(data.status);
+
+      const summary = h("div", { class: "card" },
+        h("div", { class: "summary" },
+          h("h2", null, data.trackingNumber),
+          statusBadge(data.status)),
+        h("dl", { class: "facts" },
+          h("dt", null, "Güzergâh"), h("dd", null, `${data.originCity} → ${data.destinationCity}`),
+          h("dt", null, "Alıcı"), h("dd", null, data.receiverMasked),
+          h("dt", null, "Kayıt tarihi"), h("dd", null, formatDate(data.createdAt))),
+        cancelled
+          ? h("div", { class: "msg error" }, "Bu gönderi iptal edildi.")
+          : h("ol", { class: "steps" },
+              STATUS_FLOW.map((step, index) =>
+                h("li", { class: [index <= currentIndex ? "done" : "", index === currentIndex ? "current" : ""].join(" ").trim() },
+                  STATUS_LABELS[step]))));
+
+      const events = [...data.events].reverse(); // newest first
+      const timeline = h("div", { class: "card" },
+        h("h2", null, "Hareketler"),
+        h("ul", { class: "timeline" },
+          events.map(e =>
+            h("li", null,
+              h("div", null, h("strong", null, STATUS_LABELS[e.status] ?? e.status), " · ", e.location),
+              h("div", { class: "when" }, formatDate(e.timestamp)),
+              e.note ? h("div", { class: "note" }, e.note) : null))));
+
+      result.replaceChildren(summary, timeline);
+    }
+
+    async function lookup(number) {
+      errorBox.classList.add("hidden");
+      result.replaceChildren();
+      button.disabled = true;
+      try {
+        render(await api(`/api/track/${encodeURIComponent(number)}`));
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const number = input.value.trim().toUpperCase();
+      input.value = number;
+      if (!number) return showError("Lütfen bir takip numarası gir.");
+
+      history.replaceState(null, "", `?no=${encodeURIComponent(number)}`); // so the link can be shared
+      lookup(number);
+    });
+
+    const initial = new URLSearchParams(location.search).get("no");
+    if (initial) {
+      input.value = initial.trim().toUpperCase().slice(0, 12);
+      lookup(input.value);
+    }
+  </script>
+</body>
+</html>
