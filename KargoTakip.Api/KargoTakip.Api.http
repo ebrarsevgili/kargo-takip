@@ -1,9 +1,17 @@
 @host = http://localhost:5205
-@apiKey = gelistirme-anahtari
+
+### Sign in. The auth cookie is kept by the client for the requests below
+### (REST Client for VS Code does this; if your client does not, use the browser UI instead).
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin123!"
+}
 
 ### Create a shipment (admin)
 POST {{host}}/api/shipments
-X-Api-Key: {{apiKey}}
 Content-Type: application/json
 
 {
@@ -17,11 +25,9 @@ Content-Type: application/json
 
 ### List shipments (admin). Optional: ?status=InTransit
 GET {{host}}/api/shipments
-X-Api-Key: {{apiKey}}
 
 ### Add an event (admin). Take the tracking number from the response above.
 POST {{host}}/api/shipments/KT0000000000/events
-X-Api-Key: {{apiKey}}
 Content-Type: application/json
 
 {
@@ -30,5 +36,5 @@ Content-Type: application/json
   "note": "Transfer merkezinden çıktı."
 }
 
-### Public tracking lookup
+### Public tracking lookup (no sign-in needed)
 GET {{host}}/api/track/KT0000000000

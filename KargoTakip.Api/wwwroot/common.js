@@ -51,10 +51,9 @@ function problemMessage(data, status) {
   return `Beklenmeyen bir hata oluştu (${status}).`;
 }
 
-async function api(path, { method = "GET", body, key } = {}) {
+async function api(path, { method = "GET", body } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (key) headers["X-Api-Key"] = key;
 
   let response;
   try {

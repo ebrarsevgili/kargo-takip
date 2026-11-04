@@ -13,18 +13,13 @@
       <a href="index.html">Takip sayfası</a>
     </header>
 
-    <!-- 1) API key -->
+    <!-- 1) Sign in -->
     <form id="key-form" class="card" novalidate>
       <div class="row">
-        <div class="grow">
-          <label for="api-key">API anahtarı (X-Api-Key)</label>
-          <input id="api-key" type="password" autocomplete="off" spellcheck="false">
-        </div>
+        <div class="grow"><label for="username">Kullanıcı adı</label><input id="username" autocomplete="username"></div>
+        <div class="grow"><label for="password">Şifre</label><input id="password" type="password" autocomplete="current-password"></div>
         <button type="submit">Giriş yap</button>
       </div>
-      <p class="muted" style="margin:8px 0 0;font-size:.85rem">
-        Anahtar yalnızca bu sekmede, sekme kapanana kadar tutulur.
-      </p>
       <div id="key-message" class="msg error hidden" role="alert"></div>
     </form>
 
@@ -86,13 +81,7 @@
     "use strict";
 
     const $ = id => document.getElementById(id);
-    let apiKey = "";
     let selectedNumber = null;
-
-    // sessionStorage can throw in some contexts (private tabs etc.); the page still works if the key cannot be stored.
-    function readStoredKey() { try { return sessionStorage.getItem("kargo-api-key") || ""; } catch { return ""; } }
-    function storeKey(value) { try { sessionStorage.setItem("kargo-api-key", value); } catch { /* ignore */ } }
-    function clearStoredKey() { try { sessionStorage.removeItem("kargo-api-key"); } catch { /* ignore */ } }
 
     function say(box, text, kind) {
       box.textContent = text;
@@ -100,7 +89,7 @@
     }
     function hide(box) { box.classList.add("hidden"); }
 
-    const call = (path, options = {}) => api(path, { ...options, key: apiKey });
+    const call = (path, options = {}) => api(path, options);
 
     // ---- Options ----
     $("status-filter").append(
@@ -113,26 +102,24 @@
         .map(([value, label]) => h("option", { value }, label)));
 
     // ---- Sign in ----
-    async function signIn(key) {
-      apiKey = key;
-      try {
-        await loadList();
-        storeKey(key);
-        hide($("key-message"));
-        $("panel").classList.remove("hidden");
-      } catch (error) {
-        apiKey = "";
-        clearStoredKey();
-        $("panel").classList.add("hidden");
-        say($("key-message"), error.message, "error");
-      }
+    async function showPanel() {
+      await loadList();
+      hide($("key-message"));
+      $("key-form").classList.add("hidden");
+      $("panel").classList.remove("hidden");
     }
 
-    $("key-form").addEventListener("submit", event => {
+    $("key-form").addEventListener("submit", async event => {
       event.preventDefault();
-      const key = $("api-key").value.trim();
-      if (!key) return say($("key-message"), "API anahtarını gir.", "error");
-      signIn(key);
+      const username = $("username").value.trim();
+      const password = $("password").value;
+      if (!username || !password) return say($("key-message"), "Kullanıcı adı ve şifre gerekli.", "error");
+      try {
+        await api("/api/auth/login", { method: "POST", body: { username, password } });
+        await showPanel();
+      } catch (error) {
+        say($("key-message"), error.message, "error");
+      }
     });
 
     // ---- List ----
@@ -223,9 +210,8 @@
       }
     });
 
-    // Continue automatically if this tab was already signed in.
-    const saved = readStoredKey();
-    if (saved) { $("api-key").value = saved; signIn(saved); }
+    // Continue automatically if there is already a session.
+    api("/api/auth/me").then(showPanel).catch(() => {});
   </script>
 </body>
 </html>

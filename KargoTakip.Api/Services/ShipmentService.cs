@@ -5,20 +5,6 @@ using KargoTakip.Api.Storage;
 
 namespace KargoTakip.Api.Services;
 
-public enum ResultKind { Ok, NotFound, Invalid, Conflict }
-
-public record ServiceResult<T>(
-    ResultKind Kind,
-    T? Value = default,
-    Dictionary<string, string[]>? Errors = null,
-    string? Message = null)
-{
-    public static ServiceResult<T> Ok(T value) => new(ResultKind.Ok, value);
-    public static ServiceResult<T> NotFound() => new(ResultKind.NotFound);
-    public static ServiceResult<T> Invalid(Dictionary<string, string[]> errors) => new(ResultKind.Invalid, Errors: errors);
-    public static ServiceResult<T> Conflict(string message) => new(ResultKind.Conflict, Message: message);
-}
-
 /// <summary>Business rules live here: validation, tracking number generation, status transitions.</summary>
 public sealed partial class ShipmentService
 {
