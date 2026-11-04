@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using KargoTakip.Api.Models;
 using KargoTakip.Api.Services;
 using KargoTakip.Api.Storage;
@@ -27,9 +28,25 @@ builder.Services.AddSingleton<IShipmentRepository, JsonShipmentRepository>(); //
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ShipmentService>();
 
+// ---- Rate limit the public tracking endpoint against tracking-number guessing (30 requests per minute per IP) ----
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("public-tracking", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseRateLimiter();
 
 app.MapGet("/", () => "Cargo tracking API is running.");
 
@@ -48,7 +65,8 @@ app.MapGet("/api/track/{trackingNumber}", async (string trackingNumber, Shipment
     return shipment is null
         ? Results.Problem(title: "Kargo bulunamadı", statusCode: StatusCodes.Status404NotFound)
         : Results.Ok(ToPublic(shipment));
-});
+})
+.RequireRateLimiting("public-tracking");
 
 // ===================================================================
 // Admin endpoints: require the X-Api-Key header
