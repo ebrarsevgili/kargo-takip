@@ -1,22 +1,29 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using KargoTakip.Api.Models;
+using KargoTakip.Api.Security;
 using KargoTakip.Api.Storage;
 
 namespace KargoTakip.Api.Services;
 
-/// <summary>Business rules live here: validation, tracking number generation, status transitions.</summary>
+/// <summary>
+/// Business rules live here: validation, tracking number generation, status transitions and who may do what.
+/// Admins can do everything, a courier only works with the shipments assigned to them,
+/// a customer only creates and sees their own shipments.
+/// </summary>
 public sealed partial class ShipmentService
 {
     private readonly IShipmentRepository _repo;
+    private readonly IUserRepository _users;
     private readonly TimeProvider _time;
 
-    // Serializes writes so two admins adding events to the same shipment cannot overwrite each other.
+    // Serializes writes so two people adding events to the same shipment cannot overwrite each other.
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public ShipmentService(IShipmentRepository repo, TimeProvider time)
+    public ShipmentService(IShipmentRepository repo, IUserRepository users, TimeProvider time)
     {
         _repo = repo;
+        _users = users;
         _time = time;
     }
 
@@ -31,17 +38,51 @@ public sealed partial class ShipmentService
 
     public static string Normalize(string trackingNumber) => trackingNumber.Trim().ToUpperInvariant();
 
+    // ---- Reading ----
+
+    /// <summary>Public lookup: anyone who knows the tracking number may see the limited public view.</summary>
     public Task<Shipment?> GetAsync(string trackingNumber, CancellationToken ct) =>
         _repo.GetAsync(Normalize(trackingNumber), ct);
 
-    public Task<IReadOnlyList<Shipment>> ListAsync(ShipmentStatus? status, CancellationToken ct) =>
-        _repo.ListAsync(status, null, null, ct);
-
-    public async Task<ServiceResult<Shipment>> CreateAsync(CreateShipmentRequest req, CancellationToken ct)
+    /// <summary>
+    /// Returns the shipment only if this user may see it, otherwise null. "Not allowed" looks the same as
+    /// "does not exist", so nobody can probe which tracking numbers exist.
+    /// </summary>
+    public async Task<Shipment?> GetForAsync(Actor actor, string trackingNumber, CancellationToken ct)
     {
+        var shipment = await _repo.GetAsync(Normalize(trackingNumber), ct);
+        return shipment is not null && CanSee(actor, shipment) ? shipment : null;
+    }
+
+    public Task<IReadOnlyList<Shipment>> ListAsync(Actor actor, ShipmentStatus? status, CancellationToken ct) =>
+        actor.Role switch
+        {
+            UserRole.Admin => _repo.ListAsync(status, null, null, ct),
+            UserRole.Courier => actor.CourierId is { } courierId
+                ? _repo.ListAsync(status, null, courierId, ct)
+                : Task.FromResult<IReadOnlyList<Shipment>>([]),
+            _ => _repo.ListAsync(status, actor.UserId, null, ct)
+        };
+
+    private static bool CanSee(Actor actor, Shipment shipment) => actor.Role switch
+    {
+        UserRole.Admin => true,
+        UserRole.Courier => shipment.CourierId is not null && shipment.CourierId == actor.CourierId,
+        UserRole.Customer => shipment.OwnerUserId == actor.UserId,
+        _ => false
+    };
+
+    // ---- Creating ----
+
+    public async Task<ServiceResult<Shipment>> CreateAsync(Actor actor, CreateShipmentRequest req, CancellationToken ct)
+    {
+        if (actor.Role == UserRole.Courier)
+            return ServiceResult<Shipment>.Forbidden("Kuryeler kargo oluşturamaz.");
+
         var errors = new Dictionary<string, string[]>();
 
-        var sender = Clean(req.SenderName);
+        // A customer's shipments are always their own; the sender defaults to their display name.
+        var sender = Clean(req.SenderName) ?? (actor.Role == UserRole.Customer ? actor.DisplayName : null);
         var receiver = Clean(req.ReceiverName);
         var phone = Clean(req.ReceiverPhone);
         var origin = Clean(req.OriginCity);
@@ -58,6 +99,16 @@ public sealed partial class ShipmentService
         if (req.WeightKg is null or <= 0 or > 1000)
             errors[nameof(req.WeightKg)] = new[] { "Ağırlık 0'dan büyük ve en fazla 1000 kg olmalı." };
 
+        Guid? ownerId = actor.Role == UserRole.Customer ? actor.UserId : null;
+        if (actor.Role == UserRole.Admin && Clean(req.OwnerUsername) is { } ownerUsername)
+        {
+            var owner = await _users.GetByUsernameAsync(ownerUsername, ct);
+            if (owner is null || owner.Role != UserRole.Customer)
+                errors[nameof(req.OwnerUsername)] = new[] { "Bu kullanıcı adıyla kayıtlı bir müşteri yok." };
+            else
+                ownerId = owner.Id;
+        }
+
         if (errors.Count > 0) return ServiceResult<Shipment>.Invalid(errors);
 
         await _writeLock.WaitAsync(ct);
@@ -73,6 +124,7 @@ public sealed partial class ShipmentService
                 OriginCity = origin!,
                 DestinationCity = destination!,
                 WeightKg = Math.Round(req.WeightKg!.Value, 2),
+                OwnerUserId = ownerId,
                 Status = ShipmentStatus.Created,
                 CreatedAt = now,
                 Events =
@@ -96,8 +148,13 @@ public sealed partial class ShipmentService
         }
     }
 
-    public async Task<ServiceResult<Shipment>> AddEventAsync(string trackingNumber, AddEventRequest req, CancellationToken ct)
+    // ---- Movements ----
+
+    public async Task<ServiceResult<Shipment>> AddEventAsync(Actor actor, string trackingNumber, AddEventRequest req, CancellationToken ct)
     {
+        if (actor.Role == UserRole.Customer)
+            return ServiceResult<Shipment>.Forbidden("Müşteriler hareket ekleyemez.");
+
         var errors = new Dictionary<string, string[]>();
         var location = Clean(req.Location);
         var note = Clean(req.Note);
@@ -117,14 +174,17 @@ public sealed partial class ShipmentService
         await _writeLock.WaitAsync(ct);
         try
         {
-            var shipment = await _repo.GetAsync(Normalize(trackingNumber), ct);
+            var shipment = await GetForAsync(actor, trackingNumber, ct);
             if (shipment is null) return ServiceResult<Shipment>.NotFound();
+
+            var newStatus = req.Status!.Value;
+            if (actor.Role == UserRole.Courier && newStatus == ShipmentStatus.Cancelled)
+                return ServiceResult<Shipment>.Forbidden("Kuryeler kargoyu iptal edemez.");
 
             if (shipment.IsClosed)
                 return ServiceResult<Shipment>.Conflict(
                     "Teslim edilmiş veya iptal edilmiş bir kargoya yeni olay eklenemez.");
 
-            var newStatus = req.Status!.Value;
             if (newStatus != ShipmentStatus.Cancelled && Rank(newStatus) < Rank(shipment.Status))
                 return ServiceResult<Shipment>.Invalid(new()
                 {
@@ -152,6 +212,8 @@ public sealed partial class ShipmentService
         }
     }
 
+    // ---- Helpers ----
+
     /// <summary>"Jane Doe" → "J*** D**". Hides the receiver's identity on the public page.</summary>
     public static string MaskName(string name) =>
         string.Join(' ', name
@@ -177,7 +239,7 @@ public sealed partial class ShipmentService
                 $"KT{RandomNumberGenerator.GetInt32(0, 100_000):D5}{RandomNumberGenerator.GetInt32(0, 100_000):D5}";
             if (!await _repo.ExistsAsync(candidate, ct)) return candidate;
         }
-        throw new InvalidOperationException("Benzersiz takip numarası üretilemedi.");
+        throw new InvalidOperationException("Could not generate a unique tracking number.");
     }
 
     private static string? Clean(string? value)

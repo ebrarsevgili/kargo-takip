@@ -8,7 +8,8 @@ public record CreateShipmentRequest(
     string? ReceiverPhone,
     string? OriginCity,
     string? DestinationCity,
-    decimal? WeightKg);
+    decimal? WeightKg,
+    string? OwnerUsername = null);   // admins may create a shipment on behalf of a customer
 
 public record AddEventRequest(
     ShipmentStatus? Status,
@@ -29,8 +30,8 @@ public record PublicTrackingDto(
     DateTimeOffset CreatedAt,
     IReadOnlyList<TrackingEventDto> Events);
 
-/// <summary>Admin view: all fields.</summary>
-public record AdminShipmentDto(
+/// <summary>Full view for signed-in users (access is limited by role, see ShipmentService).</summary>
+public record ShipmentDto(
     string TrackingNumber,
     string SenderName,
     string ReceiverName,
@@ -40,4 +41,7 @@ public record AdminShipmentDto(
     decimal WeightKg,
     ShipmentStatus Status,
     DateTimeOffset CreatedAt,
+    string? OwnerUsername,
+    Guid? CourierId,
+    string? CourierName,
     IReadOnlyList<TrackingEventDto> Events);

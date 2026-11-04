@@ -30,6 +30,7 @@ builder.Services.AddSingleton<IUserRepository, JsonUserRepository>();
 builder.Services.AddSingleton<ICourierRepository, JsonCourierRepository>();
 builder.Services.AddSingleton<IVehicleRepository, JsonVehicleRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ShipmentMapper>();
 builder.Services.AddSingleton<ShipmentService>();
 builder.Services.AddSingleton<AuthService>();
 
@@ -95,58 +96,13 @@ app.MapGet("/api/track/{trackingNumber}", async (string trackingNumber, Shipment
     var shipment = await service.GetAsync(trackingNumber, ct);
     return shipment is null
         ? Results.Problem(title: "Kargo bulunamadı", statusCode: StatusCodes.Status404NotFound)
-        : Results.Ok(ToPublic(shipment));
+        : Results.Ok(ShipmentMapper.ToPublic(shipment));
 })
 .RequireRateLimiting("public-tracking");
 
 // ===================================================================
-// Admin endpoints (this group is rewritten with role-based access in the next steps)
+// Signed-in users: create, list, view and update shipments (rules are enforced per role in ShipmentService)
 // ===================================================================
-var admin = app.MapGroup("/api/shipments").RequireAuthorization("AdminOnly");
-
-admin.MapPost("/", async (CreateShipmentRequest request, ShipmentService service, CancellationToken ct) =>
-{
-    var result = await service.CreateAsync(request, ct);
-    return result.Kind == ResultKind.Ok
-        ? Results.Created($"/api/shipments/{result.Value!.TrackingNumber}", ToAdmin(result.Value))
-        : result.ToProblem();
-});
-
-admin.MapGet("/", async (ShipmentStatus? status, ShipmentService service, CancellationToken ct) =>
-{
-    var items = await service.ListAsync(status, ct);
-    return Results.Ok(items.Select(ToAdmin));
-});
-
-admin.MapGet("/{trackingNumber}", async (string trackingNumber, ShipmentService service, CancellationToken ct) =>
-{
-    var shipment = await service.GetAsync(trackingNumber, ct);
-    return shipment is null
-        ? Results.Problem(title: "Kargo bulunamadı", statusCode: StatusCodes.Status404NotFound)
-        : Results.Ok(ToAdmin(shipment));
-});
-
-admin.MapPost("/{trackingNumber}/events", async (string trackingNumber, AddEventRequest request, ShipmentService service, CancellationToken ct) =>
-{
-    var result = await service.AddEventAsync(trackingNumber, request, ct);
-    return result.Kind == ResultKind.Ok ? Results.Ok(ToAdmin(result.Value!)) : result.ToProblem();
-});
+app.MapShipmentEndpoints();
 
 app.Run();
-
-// ===================================================================
-// Helpers
-// ===================================================================
-
-static IReadOnlyList<TrackingEventDto> ToEventDtos(Shipment s) =>
-    s.Events.OrderBy(e => e.Timestamp)
-            .Select(e => new TrackingEventDto(e.Status, e.Location, e.Note, e.Timestamp))
-            .ToList();
-
-static PublicTrackingDto ToPublic(Shipment s) => new(
-    s.TrackingNumber, s.Status, s.OriginCity, s.DestinationCity,
-    ShipmentService.MaskName(s.ReceiverName), s.CreatedAt, ToEventDtos(s));
-
-static AdminShipmentDto ToAdmin(Shipment s) => new(
-    s.TrackingNumber, s.SenderName, s.ReceiverName, s.ReceiverPhone,
-    s.OriginCity, s.DestinationCity, s.WeightKg, s.Status, s.CreatedAt, ToEventDtos(s));
