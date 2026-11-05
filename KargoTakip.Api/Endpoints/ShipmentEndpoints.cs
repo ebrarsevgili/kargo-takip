@@ -70,6 +70,18 @@ public static class ShipmentEndpoints
         })
         .RequireAuthorization("AdminOnly");
 
+        group.MapPut("/{trackingNumber}/courier", async (HttpContext http, string trackingNumber, AssignCourierRequest request,
+            ShipmentService service, ShipmentMapper mapper, CancellationToken ct) =>
+        {
+            if (Actor.From(http.User) is not { } actor) return Results.Unauthorized();
+
+            var result = await service.AssignCourierAsync(actor, trackingNumber, request.CourierId, ct);
+            return result.Kind == ResultKind.Ok
+                ? Results.Ok(await mapper.ToDtoAsync(result.Value!, ct))
+                : result.ToProblem();
+        })
+        .RequireAuthorization("AdminOnly");
+
         group.MapDelete("/{trackingNumber}", async (HttpContext http, string trackingNumber,
             ShipmentService service, CancellationToken ct) =>
         {

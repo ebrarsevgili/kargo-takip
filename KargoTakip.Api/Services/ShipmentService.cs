@@ -15,12 +15,17 @@ public sealed partial class ShipmentService
 {
     private readonly IShipmentRepository _repo;
     private readonly IUserRepository _users;
+    private readonly ICourierRepository _couriers;
+    private readonly IVehicleRepository _vehicles;
     private readonly TimeProvider _time;
 
-    public ShipmentService(IShipmentRepository repo, IUserRepository users, TimeProvider time)
+    public ShipmentService(IShipmentRepository repo, IUserRepository users, ICourierRepository couriers,
+        IVehicleRepository vehicles, TimeProvider time)
     {
         _repo = repo;
         _users = users;
+        _couriers = couriers;
+        _vehicles = vehicles;
         _time = time;
     }
 
@@ -214,6 +219,55 @@ public sealed partial class ShipmentService
             return await _repo.DeleteAsync(Normalize(trackingNumber), ct)
                 ? ServiceResult<bool>.Ok(true)
                 : ServiceResult<bool>.NotFound();
+        }
+        finally
+        {
+            DataLock.Gate.Release();
+        }
+    }
+
+    // ---- Courier assignment (admin only) ----
+
+    /// <summary>
+    /// Hands an open shipment to a courier (or takes it back when <paramref name="courierId"/> is null).
+    /// The courier's vehicle must be able to carry the total weight of all their open shipments.
+    /// </summary>
+    public async Task<ServiceResult<Shipment>> AssignCourierAsync(Actor actor, string trackingNumber, Guid? courierId, CancellationToken ct)
+    {
+        if (actor.Role != UserRole.Admin)
+            return ServiceResult<Shipment>.Forbidden("Kurye atamasını yalnızca yöneticiler yapabilir.");
+
+        await DataLock.Gate.WaitAsync(ct);
+        try
+        {
+            var shipment = await _repo.GetAsync(Normalize(trackingNumber), ct);
+            if (shipment is null) return ServiceResult<Shipment>.NotFound();
+
+            if (shipment.IsClosed)
+                return ServiceResult<Shipment>.Conflict("Teslim edilmiş veya iptal edilmiş bir kargoya kurye atanamaz.");
+
+            if (courierId is { } id)
+            {
+                var courier = await _couriers.GetAsync(id, ct);
+                if (courier is null)
+                    return ServiceResult<Shipment>.Invalid(new() { [nameof(AssignCourierRequest.CourierId)] = new[] { "Kurye bulunamadı." } });
+
+                if (courier.VehicleId is { } vehicleId && await _vehicles.GetAsync(vehicleId, ct) is { } vehicle)
+                {
+                    var load = (await _repo.ListAsync(null, null, id, ct))
+                        .Where(s => !s.IsClosed && s.TrackingNumber != shipment.TrackingNumber)
+                        .Sum(s => s.WeightKg);
+
+                    if (load + shipment.WeightKg > vehicle.CapacityKg)
+                        return ServiceResult<Shipment>.Conflict(
+                            $"Araç kapasitesi aşılır: {vehicle.Plate} en fazla {vehicle.CapacityKg:0.##} kg taşır, " +
+                            $"kuryenin mevcut yükü {load:0.##} kg, bu kargo {shipment.WeightKg:0.##} kg.");
+                }
+            }
+
+            shipment.CourierId = courierId;
+            await _repo.UpdateAsync(shipment, ct);
+            return ServiceResult<Shipment>.Ok(shipment);
         }
         finally
         {
