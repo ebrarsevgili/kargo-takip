@@ -2,8 +2,10 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using KargoTakip.Api.Endpoints;
 using KargoTakip.Api.Models;
+using KargoTakip.Api.Security;
 using KargoTakip.Api.Services;
 using KargoTakip.Api.Storage;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +47,21 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;  // use Always when you serve over HTTPS
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
+
+        // On every request: is the account still there with the same role? Otherwise the cookie is rejected,
+        // so deleting a courier takes effect immediately instead of when the cookie expires.
+        options.Events.OnValidatePrincipal = async ctx =>
+        {
+            var actor = Actor.From(ctx.Principal!);
+            var users = ctx.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+            var user = actor is null ? null : await users.GetByIdAsync(actor.UserId, ctx.HttpContext.RequestAborted);
+
+            if (user is null || user.Role != actor!.Role || user.CourierId != actor.CourierId)
+            {
+                ctx.RejectPrincipal();
+                await ctx.HttpContext.SignOutAsync();
+            }
+        };
 
         // This is an API: answer 401 / 403 instead of redirecting to a login page.
         options.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
