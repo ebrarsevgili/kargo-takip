@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Giriş yap - Kargo Takip</title>
+  <link rel="stylesheet" href="vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="auth">
+    <a class="brand" href="/"><span class="brand-mark"></span>Kargo Takip</a>
+
+    <h1 id="title">Hesabına giriş yap</h1>
+    <p class="muted" id="subtitle">Kargolarını yönetmek ve yeni gönderi oluşturmak için giriş yap.</p>
+
+    <div class="tabs" role="tablist" aria-label="Giriş veya kayıt">
+      <button type="button" role="tab" id="tab-login" aria-selected="true" aria-controls="login-form">Giriş yap</button>
+      <button type="button" role="tab" id="tab-register" aria-selected="false" aria-controls="register-form">Kayıt ol</button>
+    </div>
+
+    <div id="notice" class="notice error hidden" role="alert"></div>
+
+    <form id="login-form" role="tabpanel" aria-labelledby="tab-login" novalidate></form>
+    <form id="register-form" role="tabpanel" aria-labelledby="tab-register" class="hidden" novalidate></form>
+
+    <p class="muted auth-foot">Sadece bir gönderiyi mi takip ediyorsun? <a href="/">Takip numaranla sorgula</a>, hesap gerekmez.</p>
+  </main>
+
+  <script type="module" src="login.js"></script>
+</body>
+</html>

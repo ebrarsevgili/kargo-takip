@@ -419,3 +419,4 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
 .result-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .result-grid .panel-pad { display: grid; gap: 14px; }
 @media (max-width: 760px) { .result-grid { grid-template-columns: minmax(0, 1fr); } }
+.auth-foot { margin-top: 24px; }
