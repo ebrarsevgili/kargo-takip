@@ -403,6 +403,7 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
   .hide-sm { display: none; }
   table.data th, table.data td { padding: 10px 10px; }
   .toolbar select { width: 100%; }
+  .track-form .btn { width: 100%; }
   h1 { font-size: 1.75rem; }
   .label-sheet { width: 100%; max-width: 105mm; }
 }
@@ -414,3 +415,7 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
 /* A form that lives inside a dialog scrolls its body and keeps the footer in view */
 .modal-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .modal-form .modal-body { flex: 1; }
+
+.result-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.result-grid .panel-pad { display: grid; gap: 14px; }
+@media (max-width: 760px) { .result-grid { grid-template-columns: minmax(0, 1fr); } }
