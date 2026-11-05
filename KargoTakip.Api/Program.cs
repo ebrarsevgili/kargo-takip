@@ -33,6 +33,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ShipmentMapper>();
 builder.Services.AddSingleton<ShipmentService>();
 builder.Services.AddSingleton<AuthService>();
+builder.Services.AddSingleton<FleetService>();
 
 // ---- Authentication: an encrypted, signed cookie issued at sign-in ----
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -104,5 +105,6 @@ app.MapGet("/api/track/{trackingNumber}", async (string trackingNumber, Shipment
 // Signed-in users: create, list, view and update shipments (rules are enforced per role in ShipmentService)
 // ===================================================================
 app.MapShipmentEndpoints();
+app.MapFleetEndpoints();
 
 app.Run();
