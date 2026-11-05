@@ -68,6 +68,17 @@ public sealed partial class ShipmentService
             _ => _repo.ListAsync(status, actor.UserId, null, ct)
         };
 
+    public async Task<StatsDto> StatsAsync(Actor actor, CancellationToken ct)
+    {
+        var visible = await ListAsync(actor, null, ct);
+
+        return new StatsDto(
+            visible.Count,
+            visible.Count(s => !s.IsClosed),
+            Enum.GetValues<ShipmentStatus>().ToDictionary(status => status.ToString(), status => visible.Count(s => s.Status == status)),
+            actor.Role == UserRole.Admin ? visible.Count(s => !s.IsClosed && s.CourierId is null) : null);
+    }
+
     public const int MaxPageSize = 50;
 
     /// <summary>Filtered, newest-first, paged list of the shipments this user may see.</summary>

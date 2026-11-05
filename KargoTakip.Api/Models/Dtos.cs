@@ -53,3 +53,10 @@ public record ShipmentDto(
     Guid? CourierId,
     string? CourierName,
     IReadOnlyList<TrackingEventDto> Events);
+
+/// <summary>Numbers for the dashboard header, counted over the shipments the signed-in user may see.</summary>
+public record StatsDto(
+    int Total,
+    int Open,
+    IReadOnlyDictionary<string, int> ByStatus,
+    int? Unassigned);   // admins only: open shipments that have no courier yet

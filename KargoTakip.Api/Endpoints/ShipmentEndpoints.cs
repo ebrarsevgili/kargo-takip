@@ -35,6 +35,12 @@ public static class ShipmentEndpoints
             return Results.Ok(result.WithItems(await mapper.ToDtosAsync(result.Items, ct)));
         });
 
+        group.MapGet("/stats", async (HttpContext http, ShipmentService service, CancellationToken ct) =>
+        {
+            if (Actor.From(http.User) is not { } actor) return Results.Unauthorized();
+            return Results.Ok(await service.StatsAsync(actor, ct));
+        });
+
         group.MapGet("/{trackingNumber}", async (HttpContext http, string trackingNumber,
             ShipmentService service, ShipmentMapper mapper, CancellationToken ct) =>
         {
