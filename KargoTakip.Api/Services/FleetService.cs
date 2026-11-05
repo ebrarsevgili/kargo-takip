@@ -123,6 +123,178 @@ public sealed partial class FleetService
         }
     }
 
+    // =====================================================================
+    // Couriers
+    // =====================================================================
+
+    public async Task<ServiceResult<IReadOnlyList<CourierDto>>> ListCouriersAsync(Actor actor, CancellationToken ct)
+    {
+        if (Guard<IReadOnlyList<CourierDto>>(actor) is { } denied) return denied;
+
+        return ServiceResult<IReadOnlyList<CourierDto>>.Ok(await BuildCourierDtosAsync(await _couriers.ListAsync(ct), ct));
+    }
+
+    public async Task<ServiceResult<CourierDto>> CreateCourierAsync(Actor actor, CreateCourierRequest req, CancellationToken ct)
+    {
+        if (Guard<CourierDto>(actor) is { } denied) return denied;
+
+        var errors = ValidateCourier(req.Name, req.Phone, out var name, out var phone);
+        if (errors.Count > 0) return ServiceResult<CourierDto>.Invalid(errors);
+
+        await DataLock.Gate.WaitAsync(ct);
+        try
+        {
+            if (await CheckVehicleAsync<CourierDto>(req.VehicleId, null, ct) is { } vehicleProblem)
+                return vehicleProblem;
+
+            // The courier's login is created first: it validates the username and password and nothing is stored if they are wrong.
+            var courier = new Courier { Name = name, Phone = phone, VehicleId = req.VehicleId };
+            var account = await _auth.CreateUserAsync(req.Username, name, req.Password, UserRole.Courier, courier.Id, ct);
+            if (account.Kind != ResultKind.Ok) return Relay<CourierDto>(account);
+
+            try
+            {
+                await _couriers.AddAsync(courier, ct);
+            }
+            catch
+            {
+                await _users.DeleteAsync(account.Value!.Id, ct);   // do not leave a login without a courier behind
+                throw;
+            }
+
+            return ServiceResult<CourierDto>.Ok((await BuildCourierDtosAsync([courier], ct))[0]);
+        }
+        finally
+        {
+            DataLock.Gate.Release();
+        }
+    }
+
+    public async Task<ServiceResult<CourierDto>> UpdateCourierAsync(Actor actor, Guid id, UpdateCourierRequest req, CancellationToken ct)
+    {
+        if (Guard<CourierDto>(actor) is { } denied) return denied;
+
+        var errors = ValidateCourier(req.Name, req.Phone, out var name, out var phone);
+        if (errors.Count > 0) return ServiceResult<CourierDto>.Invalid(errors);
+
+        await DataLock.Gate.WaitAsync(ct);
+        try
+        {
+            var courier = await _couriers.GetAsync(id, ct);
+            if (courier is null) return ServiceResult<CourierDto>.NotFound();
+
+            if (await CheckVehicleAsync<CourierDto>(req.VehicleId, id, ct) is { } vehicleProblem)
+                return vehicleProblem;
+
+            courier.Name = name;
+            courier.Phone = phone;
+            courier.VehicleId = req.VehicleId;
+            await _couriers.UpdateAsync(courier, ct);
+
+            if (await _users.GetByCourierIdAsync(id, ct) is { } user)
+            {
+                user.DisplayName = name;
+                await _users.UpdateAsync(user, ct);
+            }
+
+            return ServiceResult<CourierDto>.Ok((await BuildCourierDtosAsync([courier], ct))[0]);
+        }
+        finally
+        {
+            DataLock.Gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Removes the courier and their login. Refused while they still have open shipments (reassign those first);
+    /// delivered / cancelled shipments simply lose the courier reference.
+    /// </summary>
+    public async Task<ServiceResult<bool>> DeleteCourierAsync(Actor actor, Guid id, CancellationToken ct)
+    {
+        if (Guard<bool>(actor) is { } denied) return denied;
+
+        await DataLock.Gate.WaitAsync(ct);
+        try
+        {
+            if (await _couriers.GetAsync(id, ct) is null) return ServiceResult<bool>.NotFound();
+
+            var shipments = await _shipments.ListAsync(null, null, id, ct);
+            if (shipments.Any(s => !s.IsClosed))
+                return ServiceResult<bool>.Conflict("Bu kuryenin açık kargoları var. Önce onları başka bir kuryeye ata veya iptal et.");
+
+            foreach (var shipment in shipments)
+            {
+                shipment.CourierId = null;
+                await _shipments.UpdateAsync(shipment, ct);
+            }
+
+            if (await _users.GetByCourierIdAsync(id, ct) is { } user)
+                await _users.DeleteAsync(user.Id, ct);
+
+            await _couriers.DeleteAsync(id, ct);
+            return ServiceResult<bool>.Ok(true);
+        }
+        finally
+        {
+            DataLock.Gate.Release();
+        }
+    }
+
+    private static Dictionary<string, string[]> ValidateCourier(string? rawName, string? rawPhone, out string name, out string? phone)
+    {
+        var errors = new Dictionary<string, string[]>();
+        name = rawName?.Trim() ?? "";
+        phone = string.IsNullOrWhiteSpace(rawPhone) ? null : rawPhone.Trim();
+
+        if (name.Length is < 2 or > 60)
+            errors["Name"] = ["Ad 2-60 karakter olmalı."];
+
+        if (phone is not null && !ShipmentService.IsValidPhone(phone))
+            errors["Phone"] = ["Telefon numarası 7-20 karakter olmalı; yalnızca rakam, +, -, boşluk ve parantez içerebilir."];
+
+        return errors;
+    }
+
+    /// <summary>Null when the vehicle is fine to use; otherwise the problem to return. A vehicle belongs to one courier at a time.</summary>
+    private async Task<ServiceResult<T>?> CheckVehicleAsync<T>(Guid? vehicleId, Guid? exceptCourierId, CancellationToken ct)
+    {
+        if (vehicleId is null) return null;
+
+        if (await _vehicles.GetAsync(vehicleId.Value, ct) is null)
+            return ServiceResult<T>.Invalid(new() { ["VehicleId"] = ["Araç bulunamadı."] });
+
+        if ((await _couriers.ListAsync(ct)).Any(c => c.VehicleId == vehicleId && c.Id != exceptCourierId))
+            return ServiceResult<T>.Conflict("Bu araç başka bir kuryeye atanmış.");
+
+        return null;
+    }
+
+    private async Task<IReadOnlyList<CourierDto>> BuildCourierDtosAsync(IEnumerable<Courier> couriers, CancellationToken ct)
+    {
+        var vehicles = (await _vehicles.ListAsync(ct)).ToDictionary(v => v.Id);
+        var open = (await _shipments.ListAsync(null, null, null, ct))
+            .Where(s => s.CourierId is not null && !s.IsClosed)
+            .ToLookup(s => s.CourierId!.Value);
+
+        var result = new List<CourierDto>();
+        foreach (var courier in couriers)
+        {
+            var user = await _users.GetByCourierIdAsync(courier.Id, ct);
+            var vehicle = courier.VehicleId is { } vid && vehicles.TryGetValue(vid, out var v) ? v : null;
+            var mine = open[courier.Id].ToList();
+
+            result.Add(new CourierDto(courier.Id, courier.Name, courier.Phone, courier.VehicleId,
+                vehicle?.Plate, vehicle?.CapacityKg, user?.Username, mine.Count, mine.Sum(s => s.WeightKg)));
+        }
+        return result;
+    }
+
+    /// <summary>Passes a failed account creation on as a courier error (the form field is called "Name", not "DisplayName").</summary>
+    private static ServiceResult<T> Relay<T>(ServiceResult<AppUser> failed) =>
+        new(failed.Kind, default,
+            failed.Errors?.ToDictionary(e => e.Key == "DisplayName" ? "Name" : e.Key, e => e.Value),
+            failed.Message);
+
     private static Dictionary<string, string[]> ValidateVehicle(VehicleRequest req, out string plate, out string type)
     {
         var errors = new Dictionary<string, string[]>();
