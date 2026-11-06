@@ -5,7 +5,8 @@ import {
   h, icon, api, debounce, toast, statusChip, routeStrip, emptyState, formatDay, formatKg,
   formDialog, STATUS_LABELS
 } from "../ui.js";
-import { CITY_NAMES } from "../cities.js";
+import { ensureCityList } from "../cities.js";
+import { openShipment } from "./shipment-detail.js";
 
 const TITLES = { Admin: "Kargolar", Courier: "Teslimatlarım", Customer: "Kargolarım" };
 const PAGE_SIZE = 10;
@@ -22,8 +23,7 @@ export async function mount(container, ctx) {
     page: Number(ctx.params.get("page")) || 1
   };
 
-  // One shared list of city names for every city input on this page.
-  const cityList = h("datalist", { id: "city-list" }, CITY_NAMES.map(name => h("option", { value: name })));
+  ensureCityList();   // suggestions for every city input on this page
 
   const searchInput = h("input", { type: "search", placeholder: "Takip no, alıcı, şehir veya telefon ara", "aria-label": "Kargo ara", value: state.q, autocomplete: "off" });
   const statusSelect = h("select", { "aria-label": "Duruma göre filtrele" },
@@ -43,7 +43,6 @@ export async function mount(container, ctx) {
     unassignedToggle);
 
   container.replaceChildren(
-    cityList,
     h("div", { class: "page-head" },
       h("h1", null, TITLES[me.role]),
       h("div", { class: "actions" },
@@ -120,7 +119,7 @@ export async function mount(container, ctx) {
 
   function row(item) {
     return h("tr", null,
-      h("td", null, h("a", { class: "link-btn", href: `index.html?no=${encodeURIComponent(item.trackingNumber)}`, target: "_blank", rel: "noopener" }, item.trackingNumber)),
+      h("td", null, h("button", { type: "button", class: "link-btn", onclick: () => open(item.trackingNumber) }, item.trackingNumber)),
       h("td", null, item.receiverName, item.receiverPhone ? h("span", { class: "cell-sub" }, item.receiverPhone) : null),
       h("td", { class: "hide-sm", style: "min-width: 220px" }, routeStrip(item.originCity, item.destinationCity, item.status),
         h("span", { class: "cell-sub" }, formatKg(item.weightKg))),
@@ -130,6 +129,10 @@ export async function mount(container, ctx) {
   }
 
   const isClosed = item => item.status === "Delivered" || item.status === "Cancelled";
+
+  function open(trackingNumber) {
+    return openShipment(trackingNumber, { me, onChange: reload });
+  }
 
   function goTo(page) {
     state.page = page;
@@ -190,6 +193,7 @@ export async function mount(container, ctx) {
       toast(`Kargo oluşturuldu: ${created.trackingNumber}`);
       state.page = 1;
       reload();
+      open(created.trackingNumber);
     }
   }
 

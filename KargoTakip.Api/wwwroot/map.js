@@ -91,8 +91,13 @@ export async function showRouteMap(container, { origin, destination, events = []
   else map.fitBounds(bounds, { padding: [48, 48], maxZoom: 8 });
 
   // The container may still be animating into view (drawer) or hidden: re-measure shortly after.
-  setTimeout(() => map.invalidateSize(), 60);
-  setTimeout(() => map.invalidateSize(), 320);
+  // The timers are cancelled in destroy(), because measuring a map that was already removed throws.
+  const timers = [60, 320].map(ms => setTimeout(() => map.invalidateSize(), ms));
 
-  return { destroy: () => map.remove() };
+  return {
+    destroy() {
+      timers.forEach(clearTimeout);
+      map.remove();
+    }
+  };
 }

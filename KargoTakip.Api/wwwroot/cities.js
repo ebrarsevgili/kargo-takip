@@ -1,7 +1,7 @@
 // The 81 provinces of Turkey with approximate coordinates of their centres (used to draw route maps),
 // plus a lookup that understands how people actually type a city: "istanbul", "İZMİR", "Kocaeli Aktarma Merkezi".
 
-import { fold } from "./ui.js";
+import { fold, h } from "./ui.js";
 
 // [name, latitude, longitude, ...extra names people use]
 const RAW = [
@@ -54,4 +54,10 @@ export function findCity(text) {
     }
   }
   return best;
+}
+
+/** Adds <datalist id="city-list"> to the page once, so any input with list="city-list" suggests the provinces. */
+export function ensureCityList() {
+  if (document.getElementById("city-list")) return;
+  document.body.append(h("datalist", { id: "city-list" }, CITY_NAMES.map(name => h("option", { value: name }))));
 }
