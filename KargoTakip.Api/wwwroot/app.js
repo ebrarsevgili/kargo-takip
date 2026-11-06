@@ -7,7 +7,9 @@ import { h, icon, api, ApiError, ROLE_LABELS, setUnauthorizedHandler, toast } fr
 const ROUTES = [
   { path: "ozet", label: () => "Özet", icon: "grid", roles: ["Admin", "Courier", "Customer"], load: () => import("./views/overview.js") },
   { path: "kargolar", label: user => ({ Admin: "Kargolar", Courier: "Teslimatlarım", Customer: "Kargolarım" })[user.role], icon: "box",
-    roles: ["Admin", "Courier", "Customer"], load: () => import("./views/shipments.js") }
+    roles: ["Admin", "Courier", "Customer"], load: () => import("./views/shipments.js") },
+  { path: "kuryeler", label: () => "Kuryeler", icon: "users", roles: ["Admin"], load: () => import("./views/couriers.js") },
+  { path: "araclar", label: () => "Araçlar", icon: "truck", roles: ["Admin"], load: () => import("./views/vehicles.js") }
 ];
 
 const rail = document.getElementById("rail");
