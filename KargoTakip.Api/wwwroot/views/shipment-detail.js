@@ -80,6 +80,9 @@ export async function openShipment(trackingNumber, { me, onChange }) {
 
   function actions(closed) {
     return h("div", { class: "action-row" },
+      me.role !== "Courier"
+        ? h("a", { class: "btn btn-sm", href: `label.html?no=${encodeURIComponent(shipment.trackingNumber)}`, target: "_blank", rel: "noopener" }, icon("printer", 16), "Etiket yazdır")
+        : null,
       h("button", { type: "button", class: "btn btn-sm", onclick: copyLink }, icon("link", 16), "Takip bağlantısını kopyala"),
       isAdmin && !closed ? h("button", { type: "button", class: "btn btn-sm", onclick: edit }, icon("pencil", 16), "Düzenle") : null,
       isAdmin ? h("button", { type: "button", class: "btn btn-sm btn-danger", onclick: remove }, icon("trash", 16), "Sil") : null);

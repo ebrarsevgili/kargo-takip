@@ -370,6 +370,8 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
 .label-party .city { font: 600 1.15rem/1.2 var(--font-display); }
 .label-to { display: grid; align-content: center; gap: 2mm; }
 .label-to .city { font: 700 2.2rem/1 var(--font-display); }
+.label-to .label-party + .label-party { border-top: 2px solid #000; padding-top: 3mm; }
+.label-to > .city { border-top: 2px solid #000; padding-top: 3mm; }
 .label-bottom { display: flex; justify-content: space-between; align-items: center; gap: 5mm; }
 .label-bottom .qr { width: 28mm; height: 28mm; flex: none; }
 .label-bottom .qr svg { width: 100%; height: 100%; display: block; }
