@@ -244,6 +244,7 @@ body.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-heigh
 .who strong { font-weight: 600; overflow-wrap: anywhere; }
 .who span { font-size: 0.8125rem; color: var(--ink-soft); }
 
+.main:focus { outline: none; }
 .main { padding: 28px 32px 72px; min-width: 0; max-width: 1180px; width: 100%; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .page-head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -251,7 +252,7 @@ body.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-heigh
 .section-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 
 /* Stat strip: one ruled box, not a row of separate cards */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
 .stat { display: grid; gap: 2px; padding: 16px 18px; color: var(--ink); text-decoration: none; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin: 0 -1px -1px 0; }
 .stat:hover { background: #fafbfc; }
 .stat .figure { font: 700 2.5rem/1 var(--font-display); font-variant-numeric: tabular-nums; }
@@ -385,7 +386,7 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
 /* ---- Small screens ---------------------------------------------------- */
 
 @media (max-width: 900px) {
-  body.app { grid-template-columns: minmax(0, 1fr); }
+  body.app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .rail {
     position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center;
     gap: 10px 16px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--rule);
@@ -401,6 +402,7 @@ ul.timeline .note { margin-top: 2px; color: var(--ink-soft); }
 @media (max-width: 640px) {
   .form-grid { grid-template-columns: minmax(0, 1fr); }
   .hide-sm { display: none; }
+  .who { display: none; }
   table.data th, table.data td { padding: 10px 10px; }
   .toolbar select { width: 100%; }
   .track-form .btn { width: 100%; }
