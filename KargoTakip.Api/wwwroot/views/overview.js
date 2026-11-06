@@ -1,6 +1,6 @@
 // Overview: how many shipments are at each stage of the flow, for the shipments this user may see.
 
-import { h, api, STATUS_FLOW, STATUS_LABELS, emptyState } from "../ui.js";
+import { h, icon, api, STATUS_FLOW, STATUS_LABELS, emptyState } from "../ui.js";
 
 const WELCOME = {
   Admin: "Tüm kargoların aşama aşama dağılımı. Bir aşamaya tıklayınca o kargolar listelenir.",
@@ -26,6 +26,9 @@ export async function mount(container, { me }) {
     h("div", { class: "page-head" },
       h("div", null, h("h1", null, `Merhaba, ${me.displayName.split(" ")[0]}`), h("p", { class: "muted" }, WELCOME[me.role]))),
     stats.total === 0
-      ? h("div", { class: "panel" }, emptyState("Henüz kargo yok", me.role === "Courier" ? "Yönetici sana kargo atadığında burada görünür." : "İlk kargoyu oluşturduğunda burada görünür."))
+      ? h("div", { class: "panel" }, emptyState(
+          "Henüz kargo yok",
+          me.role === "Courier" ? "Yönetici sana kargo atadığında burada görünür." : "İlk kargoyu oluşturarak başla.",
+          me.role === "Courier" ? null : h("a", { class: "btn btn-primary", href: "#/kargolar?yeni=1" }, icon("plus", 18), "Yeni kargo")))
       : h("div", { class: "stats" }, cells));
 }

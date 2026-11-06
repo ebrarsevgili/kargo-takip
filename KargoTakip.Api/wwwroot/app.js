@@ -5,7 +5,9 @@ import { h, icon, api, ApiError, ROLE_LABELS, setUnauthorizedHandler, toast } fr
 
 // A menu entry appears only for the roles listed; the server enforces the same rules on every request.
 const ROUTES = [
-  { path: "ozet", label: () => "Özet", icon: "grid", roles: ["Admin", "Courier", "Customer"], load: () => import("./views/overview.js") }
+  { path: "ozet", label: () => "Özet", icon: "grid", roles: ["Admin", "Courier", "Customer"], load: () => import("./views/overview.js") },
+  { path: "kargolar", label: user => ({ Admin: "Kargolar", Courier: "Teslimatlarım", Customer: "Kargolarım" })[user.role], icon: "box",
+    roles: ["Admin", "Courier", "Customer"], load: () => import("./views/shipments.js") }
 ];
 
 const rail = document.getElementById("rail");

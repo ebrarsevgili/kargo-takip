@@ -14,7 +14,7 @@ export const STATUS_LABELS = {
 export const STATUS_FLOW = ["Created", "PickedUp", "InTransit", "OutForDelivery", "Delivered"];
 
 // How far along the route strip the marker sits for each status.
-const STATUS_PROGRESS = { Created: 6, PickedUp: 24, InTransit: 55, OutForDelivery: 82, Delivered: 100, Cancelled: 0 };
+const STATUS_PROGRESS = { Created: 0, PickedUp: 24, InTransit: 55, OutForDelivery: 82, Delivered: 100, Cancelled: 0 };
 
 export const ROLE_LABELS = { Admin: "Yönetici", Courier: "Kurye", Customer: "Müşteri" };
 
