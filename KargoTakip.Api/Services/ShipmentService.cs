@@ -86,6 +86,8 @@ public sealed partial class ShipmentService
     {
         var visible = await ListAsync(actor, filter.Status, ct);
 
+        if (filter.Unassigned) visible = visible.Where(s => !s.IsClosed && s.CourierId is null).ToList();
+
         var term = filter.Search?.Trim();
         IEnumerable<Shipment> matches = string.IsNullOrEmpty(term)
             ? visible

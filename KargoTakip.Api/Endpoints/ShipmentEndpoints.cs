@@ -25,13 +25,13 @@ public static class ShipmentEndpoints
                 : result.ToProblem();
         });
 
-        // GET /api/shipments?status=InTransit&q=ankara&page=2&pageSize=10
-        group.MapGet("/", async (HttpContext http, ShipmentStatus? status, string? q, int? page, int? pageSize,
+        // GET /api/shipments?status=InTransit&q=ankara&page=2&pageSize=10&unassigned=true
+        group.MapGet("/", async (HttpContext http, ShipmentStatus? status, string? q, int? page, int? pageSize, bool? unassigned,
             ShipmentService service, ShipmentMapper mapper, CancellationToken ct) =>
         {
             if (Actor.From(http.User) is not { } actor) return Results.Unauthorized();
 
-            var result = await service.SearchAsync(actor, new ShipmentFilter(status, q, page ?? 1, pageSize ?? 10), ct);
+            var result = await service.SearchAsync(actor, new ShipmentFilter(status, q, page ?? 1, pageSize ?? 10, unassigned ?? false), ct);
             return Results.Ok(result.WithItems(await mapper.ToDtosAsync(result.Items, ct)));
         });
 
