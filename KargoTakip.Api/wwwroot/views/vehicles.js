@@ -30,7 +30,7 @@ export async function mount(container) {
       : h("div", { class: "table-wrap" },
           h("table", { class: "data" },
             h("thead", null, h("tr", null,
-              h("th", null, "Plaka"), h("th", null, "Tip"), h("th", { class: "num" }, "Kapasite"), h("th", null, "Kurye"), h("th", null, ""))),
+              h("th", null, "Plaka"), h("th", null, "Tip"), h("th", { class: "num" }, "Kapasite"), h("th", { class: "hide-sm" }, "Kurye"), h("th", null, ""))),
             h("tbody", null, vehicles.map(row)))));
   }
 
@@ -39,7 +39,7 @@ export async function mount(container) {
       h("td", null, h("strong", { class: "display", style: "font-size: 1.125rem; letter-spacing: 0.04em" }, v.plate)),
       h("td", null, VEHICLE_TYPES[v.type] ?? v.type),
       h("td", { class: "num" }, formatKg(v.capacityKg)),
-      h("td", null, v.courierName ?? h("span", { class: "muted" }, "Boşta")),
+      h("td", { class: "hide-sm" }, v.courierName ?? h("span", { class: "muted" }, "Boşta")),
       h("td", { class: "actions" },
         h("button", { type: "button", class: "btn btn-sm btn-icon", "aria-label": `Düzenle: ${v.plate}`, title: "Düzenle", onclick: () => edit(v) }, icon("pencil", 16)),
         h("button", { type: "button", class: "btn btn-sm btn-icon btn-danger", "aria-label": `Sil: ${v.plate}`, title: "Sil", onclick: () => remove(v) }, icon("trash", 16))));
