@@ -1,6 +1,7 @@
 @host = http://localhost:5205
 
-### Sign in. The auth cookie is kept by the client for the requests below
+### Sign in as the admin created from appsettings.Development.json.
+### The auth cookie is kept by the client for the requests below
 ### (REST Client for VS Code does this; if your client does not, use the browser UI instead).
 POST {{host}}/api/auth/login
 Content-Type: application/json
@@ -10,7 +11,35 @@ Content-Type: application/json
   "password": "Admin123!"
 }
 
-### Create a shipment (admin)
+### Who am I?
+GET {{host}}/api/auth/me
+
+### Create a vehicle (admin). Types: motorbike, car, van, truck
+# @name vehicle
+POST {{host}}/api/vehicles
+Content-Type: application/json
+
+{
+  "plate": "34 ABC 123",
+  "type": "van",
+  "capacityKg": 1200
+}
+
+### Create a courier together with their login (admin)
+# @name courier
+POST {{host}}/api/couriers
+Content-Type: application/json
+
+{
+  "name": "Kemal Yıldız",
+  "phone": "0532 111 22 33",
+  "vehicleId": "{{vehicle.response.body.$.id}}",
+  "username": "kemal",
+  "password": "Kurye1234!"
+}
+
+### Create a shipment (admin). "ownerUsername" links it to a customer account (optional).
+# @name shipment
 POST {{host}}/api/shipments
 Content-Type: application/json
 
@@ -23,11 +52,16 @@ Content-Type: application/json
   "weightKg": 2.5
 }
 
-### List shipments (admin). Optional: ?status=InTransit
-GET {{host}}/api/shipments
+### Hand the shipment to the courier (admin). Refused when the vehicle cannot carry the weight.
+PUT {{host}}/api/shipments/{{shipment.response.body.$.trackingNumber}}/courier
+Content-Type: application/json
 
-### Add an event (admin). Take the tracking number from the response above.
-POST {{host}}/api/shipments/KT0000000000/events
+{
+  "courierId": "{{courier.response.body.$.id}}"
+}
+
+### Add a movement (admin, or the assigned courier)
+POST {{host}}/api/shipments/{{shipment.response.body.$.trackingNumber}}/events
 Content-Type: application/json
 
 {
@@ -36,5 +70,30 @@ Content-Type: application/json
   "note": "Transfer merkezinden çıktı."
 }
 
+### List with search, filter and paging. Everything is optional.
+GET {{host}}/api/shipments?q=ankara&status=InTransit&page=1&pageSize=10
+
+### Dashboard numbers
+GET {{host}}/api/shipments/stats
+
+### Edit a shipment (admin)
+PUT {{host}}/api/shipments/{{shipment.response.body.$.trackingNumber}}
+Content-Type: application/json
+
+{
+  "senderName": "Ayşe Yılmaz",
+  "receiverName": "Mehmet Demir",
+  "receiverPhone": "0532 000 00 00",
+  "originCity": "İstanbul",
+  "destinationCity": "Isparta",
+  "weightKg": 3
+}
+
+### Delete a shipment (admin)
+DELETE {{host}}/api/shipments/{{shipment.response.body.$.trackingNumber}}
+
 ### Public tracking lookup (no sign-in needed)
 GET {{host}}/api/track/KT0000000000
+
+### Sign out
+POST {{host}}/api/auth/logout
