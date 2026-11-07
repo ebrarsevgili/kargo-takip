@@ -7,6 +7,7 @@ using KargoTakip.Api.Services;
 using KargoTakip.Api.Storage;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,11 +27,27 @@ if (!Path.IsPathRooted(dataDirectory))
     dataDirectory = Path.Combine(builder.Environment.ContentRootPath, dataDirectory);
 
 builder.Services.AddSingleton(new StorageOptions(dataDirectory));
-// Switching storage later only changes these registrations.
-builder.Services.AddSingleton<IShipmentRepository, JsonShipmentRepository>();
-builder.Services.AddSingleton<IUserRepository, JsonUserRepository>();
-builder.Services.AddSingleton<ICourierRepository, JsonCourierRepository>();
-builder.Services.AddSingleton<IVehicleRepository, JsonVehicleRepository>();
+
+// Storage:Provider is "Sqlite" (default) or "Json". Only these registrations know which one is used;
+// the services talk to the repository interfaces.
+var useSqlite = !string.Equals(builder.Configuration["Storage:Provider"], "Json", StringComparison.OrdinalIgnoreCase);
+if (useSqlite)
+{
+    Directory.CreateDirectory(dataDirectory);
+    var connectionString = $"Data Source={Path.Combine(dataDirectory, "kargo.db")}";
+    builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite(connectionString));
+    builder.Services.AddSingleton<IShipmentRepository, EfShipmentRepository>();
+    builder.Services.AddSingleton<IUserRepository, EfUserRepository>();
+    builder.Services.AddSingleton<ICourierRepository, EfCourierRepository>();
+    builder.Services.AddSingleton<IVehicleRepository, EfVehicleRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IShipmentRepository, JsonShipmentRepository>();
+    builder.Services.AddSingleton<IUserRepository, JsonUserRepository>();
+    builder.Services.AddSingleton<ICourierRepository, JsonCourierRepository>();
+    builder.Services.AddSingleton<IVehicleRepository, JsonVehicleRepository>();
+}
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ShipmentMapper>();
 builder.Services.AddSingleton<ShipmentService>();
@@ -86,6 +103,14 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Create the database (or apply new migrations) before anything reads from it.
+if (useSqlite)
+{
+    var dbFactory = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
+    await using var db = await dbFactory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
 
 // First start: create the admin account from configuration (Admin:Username / Admin:Password).
 await app.Services.GetRequiredService<AuthService>()

@@ -8,7 +8,8 @@ interface text is in Turkish; code, comments and documentation are in English.
 - **Dashboard** with an overview, a searchable and paged shipment list, a detail panel and a printable shipping label.
 - **Logistics:** couriers (with their own logins), vehicles, and assigning shipments to couriers with a capacity check.
 
-The backend uses **no NuGet packages**, only what ships with ASP.NET Core. Data is stored in JSON files under `data/`.
+Data is stored in a SQLite database (`data/kargo.db`) through Entity Framework Core; the schema is created by migrations at start-up.
+The same repository interfaces also have a JSON-file implementation: run with `Storage__Provider=Json` to use `data/*.json` instead.
 The frontend has no build step; fonts, Leaflet and a QR code library are vendored in `wwwroot/vendor`.
 
 ## Roles
@@ -95,7 +96,7 @@ KargoTakip.Api/
 ├── Services/                ShipmentService, FleetService, AuthService (rules, role scoping) + ServiceResult
 ├── Security/                Actor (the caller as seen by services), PBKDF2 password hasher
 ├── Models/                  domain models and request/response DTOs
-├── Storage/                 repository interfaces and their JSON file implementations
+├── Storage/                 repository interfaces, EF Core + SQLite implementations (AppDbContext, Migrations) and JSON file implementations
 └── wwwroot/
     ├── index.html, track.js         public tracking page
     ├── login.html, login.js         sign-in and registration
@@ -126,13 +127,13 @@ replaced by a database without touching the services.
 
 ## Testing
 
-The app was checked with `curl` smoke tests for every endpoint and role, and with Playwright browser tests for the login,
+The app (with the JSON storage) was checked with `curl` smoke tests for every endpoint and role, and with Playwright browser tests for the login,
 shipment list, detail panel, courier/vehicle pages and the label (including a QR decode and a print-to-PDF check on
 the A6 page). Those scripts are not part of this repository.
 
 ## Limits
 
-- JSON files suit small data sets and learning projects. Every write is serialized by one lock, which is correct for a
-  single server instance but not for several.
+- SQLite suits a single server instance. Every write is also serialized by one in-process lock, which is correct for one instance
+  but not for several; a client/server database (PostgreSQL, SQL Server) would need real transactions instead of that lock.
 - No notifications (SMS / e-mail), no carrier integrations, no live GPS; the route map draws the straight line between
   the origin and destination city plus the cities of the recorded movements.
