@@ -37,6 +37,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             shipment.OwnsMany(s => s.Events, events =>
             {
                 events.ToTable("ShipmentEvents");
+                events.Property<int>("Id").ValueGeneratedOnAdd();
+                events.HasKey("Id");
                 events.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
                 events.Property(e => e.Location).HasMaxLength(100);
                 events.Property(e => e.Note).HasMaxLength(300);

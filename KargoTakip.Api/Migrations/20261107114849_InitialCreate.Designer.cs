@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace KargoTakip.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261107092947_InitialCreate")]
+    [Migration("20261107114849_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -173,9 +173,6 @@ namespace KargoTakip.Api.Migrations
                 {
                     b.OwnsMany("KargoTakip.Api.Models.TrackingEvent", "Events", b1 =>
                         {
-                            b1.Property<string>("ShipmentTrackingNumber")
-                                .HasColumnType("TEXT");
-
                             b1.Property<int>("Id")
                                 .ValueGeneratedOnAdd()
                                 .HasColumnType("INTEGER");
@@ -189,6 +186,10 @@ namespace KargoTakip.Api.Migrations
                                 .HasMaxLength(300)
                                 .HasColumnType("TEXT");
 
+                            b1.Property<string>("ShipmentTrackingNumber")
+                                .IsRequired()
+                                .HasColumnType("TEXT");
+
                             b1.Property<string>("Status")
                                 .IsRequired()
                                 .HasMaxLength(20)
@@ -197,7 +198,9 @@ namespace KargoTakip.Api.Migrations
                             b1.Property<DateTimeOffset>("Timestamp")
                                 .HasColumnType("TEXT");
 
-                            b1.HasKey("ShipmentTrackingNumber", "Id");
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ShipmentTrackingNumber");
 
                             b1.ToTable("ShipmentEvents", (string)null);
 

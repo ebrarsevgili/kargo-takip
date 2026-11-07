@@ -81,16 +81,17 @@ namespace KargoTakip.Api.Migrations
                 name: "ShipmentEvents",
                 columns: table => new
                 {
-                    ShipmentTrackingNumber = table.Column<string>(type: "TEXT", nullable: false),
-                    Id = table.Column<int>(type: "INTEGER", nullable: false),
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
                     Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
                     Location = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
                     Note = table.Column<string>(type: "TEXT", maxLength: 300, nullable: true),
-                    Timestamp = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    Timestamp = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    ShipmentTrackingNumber = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_ShipmentEvents", x => new { x.ShipmentTrackingNumber, x.Id });
+                    table.PrimaryKey("PK_ShipmentEvents", x => x.Id);
                     table.ForeignKey(
                         name: "FK_ShipmentEvents_Shipments_ShipmentTrackingNumber",
                         column: x => x.ShipmentTrackingNumber,
@@ -98,6 +99,11 @@ namespace KargoTakip.Api.Migrations
                         principalColumn: "TrackingNumber",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ShipmentEvents_ShipmentTrackingNumber",
+                table: "ShipmentEvents",
+                column: "ShipmentTrackingNumber");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Shipments_CourierId",
